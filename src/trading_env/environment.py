@@ -24,10 +24,11 @@ class TradingEnv(gym.Env):
     """
     metadata = {'render_modes': ['human', 'terminal', 'visual'], 'render_fps': 1}
 
-    def __init__(self, config: TradingEnvConfig, render_mode: Optional[str] = None) -> None:
+    def __init__(self, data_path: str, config: TradingEnvConfig, render_mode: Optional[str] = None) -> None:
         """Initialize the trading environment.
         
         Args:
+            data_path: Path to the market data file
             config: Environment configuration
             render_mode: The render mode to use
         """
@@ -36,13 +37,14 @@ class TradingEnv(gym.Env):
         # Store configuration
         self.config = config
         self.render_mode = render_mode or config.render_mode
+        self.data_path = data_path # Store data_path
         
         # Initialize components
         self.data_processor = MarketDataProcessor(window_size=config.window_size)
         self.trading_logic = TradingLogic(transaction_fee=config.transaction_fee)
         
         # Load and process market data
-        self.market_data = self.data_processor.load_and_process_data(config.data_path)
+        self.market_data = self.data_processor.load_and_process_data(self.data_path)
         
         # Initialize visualizer if needed
         self.visualizer = None

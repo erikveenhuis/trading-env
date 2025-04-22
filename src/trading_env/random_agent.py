@@ -12,8 +12,8 @@ def main():
     # Register and create environment
     gym.register(id='trading-env-v0', entry_point='trading_env.environment:TradingEnv')
     env = gym.make('trading-env-v0', 
+        data_path=data_path,
         config=TradingEnvConfig(
-            data_path=data_path,
             window_size=60,
             initial_balance=10000.0,
             transaction_fee=0.001,

@@ -7,7 +7,6 @@ class TradingEnvConfig:
     """Configuration for the trading environment."""
     
     # Data configuration
-    data_path: str
     window_size: int = 60
     
     # Trading parameters
