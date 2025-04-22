@@ -17,6 +17,7 @@ class TradingVisualizer:
         self.market_data = market_data
         self.window_size = window_size
         self.start_time = time.time()
+        self.total_steps = 1440  # Total episode steps
         
         # Set dark theme
         plt.style.use('dark_background')
@@ -24,14 +25,18 @@ class TradingVisualizer:
         # Create figure with subplots
         plt.ion()  # Enable interactive mode
         self.fig = plt.figure(figsize=(15, 12), facecolor='#1a1a1a')
-        gs = self.fig.add_gridspec(4, 1, height_ratios=[2, 1, 1, 1], hspace=0.3)
+        
+        # Create subplot grid but leave space for info panel
+        gs = self.fig.add_gridspec(6, 1, height_ratios=[2, 1, 1, 1, 1, 1], hspace=0.3, top=0.95, bottom=0.08)
         self.ax1 = self.fig.add_subplot(gs[0])  # Price
         self.ax2 = self.fig.add_subplot(gs[1])  # Position
         self.ax3 = self.fig.add_subplot(gs[2])  # Portfolio Value
         self.ax4 = self.fig.add_subplot(gs[3])  # Returns
+        self.ax5 = self.fig.add_subplot(gs[4])  # Balance
+        self.ax6 = self.fig.add_subplot(gs[5])  # Transaction Cost
         
         # Set dark background for all axes
-        for ax in [self.ax1, self.ax2, self.ax3, self.ax4]:
+        for ax in [self.ax1, self.ax2, self.ax3, self.ax4, self.ax5, self.ax6]:
             ax.set_facecolor('#1a1a1a')
             ax.grid(True, color='#333333', linestyle='--', alpha=0.3)
             ax.tick_params(colors='#cccccc')
@@ -43,17 +48,17 @@ class TradingVisualizer:
         self.fig.suptitle('Trading Environment Visualization', fontsize=14, color='white')
         
         # Initialize price plot
-        self.price_line, = self.ax1.plot([], [], '#00ffff', label='Price', linewidth=2)  # Cyan
+        self.price_line, = self.ax1.plot([], [], '#00ffff', label='Price', linewidth=1)  # Cyan
         self.ax1.set_ylabel('Price ($)', fontsize=10, color='#00ffff')
         self.ax1.tick_params(axis='y', labelcolor='#00ffff')
         self.ax1.legend(loc='upper left', facecolor='#1a1a1a', edgecolor='#333333', labelcolor='white')
         
         # Add buy/sell markers to price plot
-        self.buy_scatter = self.ax1.scatter([], [], color='#00ff00', marker='^', s=100, label='Buy')  # Green
-        self.sell_scatter = self.ax1.scatter([], [], color='#ff0000', marker='v', s=100, label='Sell')  # Red
+        self.buy_scatter = self.ax1.scatter([], [], color='#00ff00', marker='^', s=50, label='Buy')  # Green
+        self.sell_scatter = self.ax1.scatter([], [], color='#ff0000', marker='v', s=50, label='Sell')  # Red
         
         # Initialize position plot
-        self.position_line, = self.ax2.plot([], [], '#00ff00', label='Position', linewidth=2)  # Green
+        self.position_line, = self.ax2.plot([], [], '#00ff00', label='Position', linewidth=1)  # Green
         self.ax2.set_ylabel('Position (BTC)', fontsize=10, color='#00ff00')
         self.ax2.tick_params(axis='y', labelcolor='#00ff00')
         self.ax2.legend(loc='upper left', facecolor='#1a1a1a', edgecolor='#333333', labelcolor='white')
@@ -68,17 +73,33 @@ class TradingVisualizer:
         self.ax4.set_ylabel('Returns (%)', fontsize=10, color='#ff00ff')
         self.ax4.legend(loc='upper left', facecolor='#1a1a1a', edgecolor='#333333', labelcolor='white')
         
+        # Initialize balance plot
+        self.balance_line, = self.ax5.plot([], [], '#ffaa00', label='Balance', linewidth=1)  # Orange
+        self.ax5.set_ylabel('Balance ($)', fontsize=10, color='#ffaa00')
+        self.ax5.legend(loc='upper left', facecolor='#1a1a1a', edgecolor='#333333', labelcolor='white')
+        
+        # Initialize transaction cost plot
+        self.transaction_cost_line, = self.ax6.plot([], [], '#aaaaff', label='Transaction Cost', linewidth=1)  # Light blue
+        self.ax6.set_ylabel('Transaction Cost ($)', fontsize=10, color='#aaaaff')
+        self.ax6.legend(loc='upper left', facecolor='#1a1a1a', edgecolor='#333333', labelcolor='white')
+        
         # Store historical data
         self.steps: List[int] = []
         self.prices: List[float] = []
         self.positions: List[float] = []
         self.portfolio_values: List[float] = []
         self.returns: List[float] = []
+        self.balances: List[float] = []
+        self.transaction_costs: List[float] = []
         self.buy_points: List[tuple] = []  # (step, price)
         self.sell_points: List[tuple] = []  # (step, price)
         
-        # Info text
-        self.info_text = self.fig.text(0.02, 0.02, '', fontsize=10, family='monospace', color='white')
+        # Info text - create a separate axis for it
+        self.info_ax = self.fig.add_axes([0.02, 0.95, 0.35, 0.04], facecolor='#1a1a1a', alpha=0.8)
+        self.info_ax.axis('off')  # Hide axis
+        self.info_text = self.info_ax.text(0.05, 0.5, '', fontsize=9, 
+                                      family='monospace', color='white',
+                                      va='center', ha='left')
         
         # Show the plot
         plt.show(block=False)
@@ -94,6 +115,8 @@ class TradingVisualizer:
         price = info['price']
         position = info['position']
         portfolio_value = info['portfolio_value']
+        balance = info.get('balance', 0)
+        transaction_cost = info.get('transaction_cost', 0)
         
         # Calculate step length
         current_time = time.time()
@@ -105,6 +128,8 @@ class TradingVisualizer:
         self.prices.append(price)
         self.positions.append(position)
         self.portfolio_values.append(portfolio_value)
+        self.balances.append(balance)
+        self.transaction_costs.append(transaction_cost)
         
         # Calculate returns
         if len(self.portfolio_values) > 1:
@@ -128,6 +153,8 @@ class TradingVisualizer:
             self.positions = self.positions[-self.window_size:]
             self.portfolio_values = self.portfolio_values[-self.window_size:]
             self.returns = self.returns[-self.window_size:]
+            self.balances = self.balances[-self.window_size:]
+            self.transaction_costs = self.transaction_costs[-self.window_size:]
             
             # Filter trade points
             self.buy_points = [(s, p) for s, p in self.buy_points if s >= self.steps[0]]
@@ -138,6 +165,8 @@ class TradingVisualizer:
         self.position_line.set_data(self.steps, self.positions)
         self.portfolio_line.set_data(self.steps, self.portfolio_values)
         self.returns_line.set_data(self.steps, self.returns)
+        self.balance_line.set_data(self.steps, self.balances)
+        self.transaction_cost_line.set_data(self.steps, self.transaction_costs)
         
         # Update trade markers
         if self.buy_points:
@@ -147,23 +176,39 @@ class TradingVisualizer:
             sell_steps, sell_prices = zip(*self.sell_points)
             self.sell_scatter.set_offsets(np.c_[sell_steps, sell_prices])
         
-        # Update info text
-        info_str = f"Step: {step:4d} | Step Length: {step_length:.3f}s\n"
-        info_str += f"Price: ${price:.2f}\n"
-        info_str += f"Position: {position:.4f} BTC\n"
-        info_str += f"Portfolio Value: ${portfolio_value:.2f}\n"
-        info_str += f"Returns: {self.returns[-1]:.2f}%"
-        self.info_text.set_text(info_str)
+        # Create a formatted information panel
+        progress = min(1.0, step / self.total_steps)
+        bar_width = 20  # Width of the progress bar in characters
+        filled_width = int(bar_width * progress)
+        bar = '█' * filled_width + '░' * (bar_width - filled_width)
+        progress_percent = progress * 100
+        
+        # Create a semi-transparent background for the info panel
+        self.info_ax.clear()
+        self.info_ax.set_facecolor('#1a1a1a')
+        self.info_ax.patch.set_alpha(0.7)
+        self.info_ax.axis('off')
+        
+        # Format the text to only show progress
+        info_str = f"Progress: [{bar}] {step}/{self.total_steps} ({progress_percent:.1f}%)"
+        
+        # Position text in the info box with proper positioning
+        self.info_text = self.info_ax.text(0.02, 0.5, info_str, 
+                                      fontsize=9, family='monospace', 
+                                      color='white', va='center', ha='left',
+                                      transform=self.info_ax.transAxes,
+                                      bbox=dict(facecolor='#1a1a1a', alpha=0.8,
+                                              edgecolor='#333333', boxstyle='round,pad=0.3'))
         
         # Update axes limits
-        for ax in [self.ax1, self.ax2, self.ax3, self.ax4]:
+        for ax in [self.ax1, self.ax2, self.ax3, self.ax4, self.ax5, self.ax6]:
             ax.relim()
             ax.autoscale_view()
         
         # Redraw
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
-        plt.pause(0.001)  # Reduced pause time for faster animation
+        plt.pause(0.0001)  # Reduced pause time for faster animation
         
     def close(self) -> None:
         """Close the visualization."""
