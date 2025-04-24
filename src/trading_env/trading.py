@@ -22,14 +22,19 @@ class PortfolioState:
 class TradingLogic:
     """Handle trading logic and portfolio management."""
     
-    def __init__(self, transaction_fee: float) -> None:
+    def __init__(self, transaction_fee: float,
+                 reward_scale: float,
+                 invalid_action_penalty: float) -> None:
         """Initialize trading logic.
-        
+
         Args:
             transaction_fee: Transaction fee as a fraction of trade value
+            reward_scale: Scaling factor for PnL in rewards
+            invalid_action_penalty: Penalty for invalid actions
         """
         self.transaction_fee = transaction_fee
-        self.invalid_action_penalty = -1.0
+        self.reward_scale = reward_scale
+        self.invalid_action_penalty = invalid_action_penalty
     
     def handle_buy(
         self,
@@ -66,10 +71,21 @@ class TradingLogic:
         new_position = portfolio_state.position + position_change
         new_total_cost = portfolio_state.total_transaction_cost + transaction_cost
         
+        # Calculate position price as weighted average (cost basis)
+        if portfolio_state.position <= 1e-9:
+            # If no existing position, just use current price
+            new_position_price = current_price
+        else:
+            # Calculate weighted average based on old and new position sizes
+            new_position_price = (
+                (portfolio_state.position * portfolio_state.position_price) +
+                (position_change * current_price)
+            ) / new_position
+        
         return True, PortfolioState(
             balance=new_balance,
             position=new_position,
-            position_price=current_price,
+            position_price=new_position_price,
             total_transaction_cost=new_total_cost,
         )
     
@@ -151,35 +167,31 @@ class TradingLogic:
     
     def calculate_reward(
         self,
-        portfolio_state: PortfolioState,
-        new_portfolio_state: PortfolioState,
-        current_price: float,
+        prev_portfolio_value: float,
+        cur_portfolio_value: float,
         is_valid: bool,
     ) -> float:
-        """Calculate reward for the current step.
-        
+        """Calculate reward based on portfolio value change.
+
         Args:
-            portfolio_state: Portfolio state before action
-            new_portfolio_state: Portfolio state after action
-            current_price: Current asset price
-            is_valid: Whether the action was valid
-            
+            prev_portfolio_value: Portfolio value at the end of the previous step.
+            cur_portfolio_value: Portfolio value at the end of the current step.
+            is_valid: Whether the action taken in the current step was valid.
+
         Returns:
-            Calculated reward
+            Log return scaled reward or penalty for invalid action.
         """
         if not is_valid:
             return self.invalid_action_penalty
-            
-        # Calculate realized PnL
-        realized_pnl = new_portfolio_state.balance - portfolio_state.balance
-        
-        # Calculate unrealized PnL
-        old_unrealized = portfolio_state.position * (current_price - portfolio_state.position_price)
-        new_unrealized = new_portfolio_state.position * (current_price - new_portfolio_state.position_price)
-        unrealized_pnl_change = new_unrealized - old_unrealized
-        
-        # Total PnL is realized + change in unrealized
-        total_pnl = realized_pnl + unrealized_pnl_change
-        
-        # Return total PnL as reward
-        return total_pnl 
+
+        # Add small epsilon to avoid division by zero or log(0)
+        if prev_portfolio_value <= 1e-12 or cur_portfolio_value <= 1e-12:
+             return 0.0
+
+        # Calculate log return based on previous vs current value
+        log_return = np.log(cur_portfolio_value / prev_portfolio_value)
+
+        # Calculate and return the final reward (scaled log return)
+        reward = log_return * self.reward_scale
+
+        return reward 

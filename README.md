@@ -28,9 +28,8 @@ env = gym.make('trading-env-v0',
         window_size=60,
         initial_balance=10000.0,
         transaction_fee=0.001,
-        reward_pnl_scale=1.0,
-        reward_cost_scale=0.1,
-        render_mode='visual'
+        reward_scale=500.0,
+        render_mode='human'
     )
 )
 

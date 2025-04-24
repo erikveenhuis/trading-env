@@ -34,8 +34,7 @@ def trading_env(sample_data, tmp_path):
         window_size=10,
         initial_balance=10000.0,
         transaction_fee=0.001,
-        reward_pnl_scale=1.0,
-        reward_cost_scale=0.1,
+        reward_scale=500.0,
         render_mode=None,
     )
     
@@ -49,8 +48,7 @@ def test_environment_initialization(trading_env):
     assert trading_env.config.window_size == 10
     assert trading_env.config.initial_balance == 10000.0
     assert trading_env.config.transaction_fee == 0.001
-    assert trading_env.config.reward_pnl_scale == 1.0
-    assert trading_env.config.reward_cost_scale == 0.1
+    assert trading_env.config.reward_scale == 500.0
 
 
 def test_action_space(trading_env):

@@ -1,10 +1,16 @@
 """Demo script that runs a random agent in the trading environment."""
 import os
 import gymnasium as gym
+import argparse
 from gymnasium.utils.env_checker import check_env
 from trading_env.config import TradingEnvConfig
 
 def main():
+    # Add argument parser
+    parser = argparse.ArgumentParser(description='Run a random agent in the trading environment.')
+    parser.add_argument('--skip-env-check', action='store_true', help='Skip the gymnasium environment check.')
+    args = parser.parse_args()
+
     # Get project root directory
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     data_path = os.path.join(project_root, 'tests', 'fixtures', '2017-06-27_BTC-USD.csv')
@@ -12,20 +18,22 @@ def main():
     # Register and create environment
     gym.register(id='trading-env-v0', entry_point='trading_env.environment:TradingEnv')
     env = gym.make('trading-env-v0', 
-        data_path=data_path,
         config=TradingEnvConfig(
+            data_path=data_path,
             window_size=60,
             initial_balance=10000.0,
             transaction_fee=0.001,
-            reward_pnl_scale=1.0,
-            reward_cost_scale=0.1,
-            render_mode='visual'
+            reward_scale=500.0,
+            invalid_action_penalty=0.0,
+            render_mode='human'
         )
     )
     
-    print("Checking environment validity...")
-    check_env(env.unwrapped)
-    print("Environment check passed!")
+    # Conditionally run check_env
+    if not args.skip_env_check:
+        print("Checking environment validity...")
+        check_env(env.unwrapped)
+        print("Environment check passed!")
     
     observation, info = env.reset()
     env.render()

@@ -22,35 +22,42 @@ class TradingEnv(gym.Env):
     - Configurable transaction fees and initial balance
     - Customizable reward function based on PnL and trading costs
     """
-    metadata = {'render_modes': ['human', 'terminal', 'visual'], 'render_fps': 1}
+    metadata = {'render_modes': ['human', 'terminal'], 'render_fps': 60}
 
-    def __init__(self, data_path: str, config: TradingEnvConfig, render_mode: Optional[str] = None) -> None:
+    def __init__(self, config: TradingEnvConfig, render_mode: Optional[str] = None) -> None:
         """Initialize the trading environment.
         
         Args:
-            data_path: Path to the market data file
             config: Environment configuration
-            render_mode: The render mode to use
+            render_mode: The rendering mode (ignored if set in config)
         """
         super().__init__()
         
         # Store configuration
         self.config = config
-        self.render_mode = render_mode or config.render_mode
-        self.data_path = data_path # Store data_path
+        # Prioritize render_mode from config, otherwise use the argument (or None)
+        # Check if config has render_mode attribute and it's not None
+        if hasattr(config, 'render_mode') and config.render_mode is not None:
+             self.render_mode = config.render_mode
+        else:
+             self.render_mode = render_mode
         
         # Initialize components
         self.data_processor = MarketDataProcessor(window_size=config.window_size)
-        self.trading_logic = TradingLogic(transaction_fee=config.transaction_fee)
+        self.trading_logic = TradingLogic(
+            transaction_fee=config.transaction_fee,
+            reward_scale=config.reward_scale,
+            invalid_action_penalty=config.invalid_action_penalty
+        )
         
         # Load and process market data
-        self.market_data = self.data_processor.load_and_process_data(self.data_path)
+        self.market_data = self.data_processor.load_and_process_data(self.config.data_path)
         
         # Initialize visualizer if needed
         self.visualizer = None
-        if self.render_mode == "visual":
+        if self.render_mode == "human":
             self.visualizer = TradingVisualizer(self.market_data)
-        
+
         # Define action and observation spaces
         self.action_space = spaces.Discrete(7)  # 0=Hold, 1=Buy25%, 2=Buy50%, 3=Buy100%, 4=Sell25%, 5=Sell50%, 6=Sell100%
         self.observation_space = spaces.Dict({
@@ -71,6 +78,7 @@ class TradingEnv(gym.Env):
         # Initialize state variables
         self.state = None
         self.portfolio_state = None
+        self.prev_portfolio_value: Optional[float] = None
         self.reset()
 
     def reset(
@@ -106,6 +114,9 @@ class TradingEnv(gym.Env):
         observation = self._get_observation()
         info = self._get_info()
         
+        # Initialize previous portfolio value
+        self.prev_portfolio_value = info['portfolio_value']
+        
         return observation, info
 
     def _get_info(self) -> Dict[str, Union[int, float]]:
@@ -139,7 +150,7 @@ class TradingEnv(gym.Env):
         # Get current price
         current_price = self.market_data.close_prices[self.state['current_step']]
         
-        # Store old portfolio state for reward calculation
+        # Store old portfolio state for transaction cost info calculation
         old_portfolio_state = self.portfolio_state
         
         # Map action to type and value
@@ -166,12 +177,14 @@ class TradingEnv(gym.Env):
         
         # Update portfolio state
         self.portfolio_state = new_portfolio_state
-        
-        # Calculate reward
+
+        # Calculate current portfolio value (after action, using current price)
+        cur_portfolio_value = self.portfolio_state.portfolio_value(current_price)
+
+        # Calculate reward using previous and current portfolio values
         reward = float(self.trading_logic.calculate_reward(
-            portfolio_state=old_portfolio_state,
-            new_portfolio_state=self.portfolio_state,
-            current_price=current_price,
+            prev_portfolio_value=self.prev_portfolio_value,
+            cur_portfolio_value=cur_portfolio_value,
             is_valid=is_valid,
         ))
         
@@ -184,10 +197,13 @@ class TradingEnv(gym.Env):
         )
         
         # Check termination
-        terminated = self._check_termination(self.portfolio_state.portfolio_value(current_price))
+        terminated = self._check_termination(cur_portfolio_value)
         
-        # Advance step
+        # Advance step BEFORE updating prev_portfolio_value for next iteration
         self.state['current_step'] += 1
+        
+        # Update previous portfolio value for the next step
+        self.prev_portfolio_value = cur_portfolio_value
         
         return observation, reward, terminated, False, info
 
@@ -221,19 +237,11 @@ class TradingEnv(gym.Env):
             return
             
         info = self._get_info()
+
         if self.render_mode == "human":
-            print(f"Step: {info['step']}\n"
-                  f"Price: ${info['price']:.2f}\n"
-                  f"Balance: ${info['balance']:.2f}\n"
-                  f"Position: {info['position']:.4f}\n"
-                  f"Portfolio Value: ${info['portfolio_value']:.2f}\n"
-                  f"Total Transaction Cost: ${info['transaction_cost']:.2f}"
-                  + (f"\nLast Action: {info['action']}" if info['action'] is not None else "")
-                  + f"\n{'-' * 50}")
+            self.visualizer.update(info)
         elif self.render_mode == "terminal":
             print(f"Step {info['step']}: Price=${info['price']:.2f}, PV=${info['portfolio_value']:.2f}")
-        elif self.render_mode == "visual" and self.visualizer is not None:
-            self.visualizer.update(info)
 
     def close(self) -> None:
         """Clean up environment resources."""

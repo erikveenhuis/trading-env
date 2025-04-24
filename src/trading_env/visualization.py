@@ -1,5 +1,5 @@
 import matplotlib
-matplotlib.use('MacOSX')  # Use MacOSX backend for macOS
+matplotlib.use('TkAgg')  # Use TkAgg backend which is better for real-time updates
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
@@ -205,10 +205,10 @@ class TradingVisualizer:
             ax.relim()
             ax.autoscale_view()
         
-        # Redraw
+        # Redraw with minimal pause
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
-        plt.pause(0.0001)  # Reduced pause time for faster animation
+        plt.pause(0.000001)  # Minimal pause to allow UI to update
         
     def close(self) -> None:
         """Close the visualization."""
