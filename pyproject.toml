@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trading_env"
-version = "0.1.2"
+version = "0.1.4"
 description = "A flexible trading environment for reinforcement learning"
 authors = [
   { name="Erik Veenhuis" },
@@ -20,6 +20,7 @@ dependencies = [
     "gymnasium==1.1.1",
     "numpy==2.2.5",
     "pandas==2.2.3",
+    "matplotlib"
 ]
 
 [project.optional-dependencies]

@@ -16,7 +16,7 @@ class TradingEnvConfig:
     transaction_fee: float = 0.001  # 0.1% fee
     
     # Reward parameters
-    reward_scale: float = 500.0
+    reward_scale: float = 10.0
     invalid_action_penalty: float = -1.0
     
     # Environment parameters

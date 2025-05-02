@@ -58,8 +58,16 @@ class TradingLogic:
         if portfolio_state.balance <= 1e-9 or current_price <= 1e-20:
             return False, portfolio_state
             
+        # Define a minimum cash value for a buy transaction to be considered valid
+        MINIMUM_BUY_CASH_VALUE = 1.0 # $1 USD minimum buy
+            
         # Calculate gross transaction value and fee
         gross_transaction_value_cash = portfolio_state.balance * action_value
+        
+        # Check if the intended buy value is too small
+        if gross_transaction_value_cash < MINIMUM_BUY_CASH_VALUE:
+            return False, portfolio_state
+            
         transaction_cost = gross_transaction_value_cash * self.transaction_fee
         
         # Calculate net transaction value and resulting position change
@@ -111,9 +119,16 @@ class TradingLogic:
         if portfolio_state.position <= 1e-9:
             return False, portfolio_state
             
+        # Define a minimum cash value for a sell transaction to be considered valid
+        MINIMUM_SELL_CASH_VALUE = 1.0 # $1 USD minimum sell value
+            
         # Calculate shares to sell and gross transaction value
         sell_amount_shares = portfolio_state.position * action_value
         gross_transaction_value_cash = sell_amount_shares * current_price
+        
+        # Check if the intended sell value is too small
+        if gross_transaction_value_cash < MINIMUM_SELL_CASH_VALUE:
+            return False, portfolio_state
         
         # Calculate fee and net transaction value (cash received)
         transaction_cost = gross_transaction_value_cash * self.transaction_fee
@@ -140,7 +155,7 @@ class TradingLogic:
         current_price: float,
         action: int,
         action_value: float,
-    ) -> PortfolioState:
+    ) -> Tuple[PortfolioState, bool]:
         """Apply a trading action.
         
         Args:
@@ -150,20 +165,31 @@ class TradingLogic:
             action_value: Action value (0 to 1)
             
         Returns:
-            New portfolio state
+            Tuple of (New portfolio state, is_valid flag)
         """
+        is_valid: bool = True
+        new_state: PortfolioState = portfolio_state
+
         if action == 0:  # Hold
-            return portfolio_state
-            
-        if action == 1:  # Buy
-            is_valid, new_state = self.handle_buy(portfolio_state, current_price, action_value)
-            return new_state if is_valid else portfolio_state
-            
-        if action == 2:  # Sell
-            is_valid, new_state = self.handle_sell(portfolio_state, current_price, action_value)
-            return new_state if is_valid else portfolio_state
-            
-        return portfolio_state
+            # Hold is always valid, state doesn't change
+            new_state = portfolio_state
+            is_valid = True 
+
+        elif action == 1:  # Buy
+            is_valid, temp_state = self.handle_buy(portfolio_state, current_price, action_value)
+            # Only update state if the action was valid
+            new_state = temp_state if is_valid else portfolio_state
+
+        elif action == 2:  # Sell
+            is_valid, temp_state = self.handle_sell(portfolio_state, current_price, action_value)
+            # Only update state if the action was valid
+            new_state = temp_state if is_valid else portfolio_state
+
+        else: # Unknown action
+            is_valid = False # Treat unknown actions as invalid
+            new_state = portfolio_state # State does not change
+
+        return new_state, is_valid # Return the state and validity
     
     def calculate_reward(
         self,

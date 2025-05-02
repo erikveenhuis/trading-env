@@ -17,7 +17,7 @@ class TradingEnv(gym.Env):
 
     Features:
     - Normalized OHLCV observations with configurable window size
-    - Discrete action space: 0=Hold, 1=Buy25%, 2=Buy50%, 3=Buy100%, 4=Sell25%, 5=Sell50%, 6=Sell100%
+    - Discrete action space: 0=Hold, 1=Buy10%, 2=Buy25%, 3=Buy50%, 4=Sell10%, 5=Sell25%, 6=Sell100%
     - Account state information (position and balance)
     - Configurable transaction fees and initial balance
     - Customizable reward function based on PnL and trading costs
@@ -59,7 +59,7 @@ class TradingEnv(gym.Env):
             self.visualizer = TradingVisualizer(self.market_data)
 
         # Define action and observation spaces
-        self.action_space = spaces.Discrete(7)  # 0=Hold, 1=Buy25%, 2=Buy50%, 3=Buy100%, 4=Sell25%, 5=Sell50%, 6=Sell100%
+        self.action_space = spaces.Discrete(7)  # 0=Hold, 1=Buy10%, 2=Buy25%, 3=Buy50%, 4=Sell10%, 5=Sell25%, 6=Sell100%
         self.observation_space = spaces.Dict({
             "market_data": spaces.Box(
                 low=0,  # Normalized features are in [0,1]
@@ -139,7 +139,7 @@ class TradingEnv(gym.Env):
         """Execute one step in the environment.
         
         Args:
-            action: Trading action to execute (0=Hold, 1=Buy25%, 2=Buy50%, 3=Buy100%, 4=Sell25%, 5=Sell50%, 6=Sell100%)
+            action: Trading action to execute (0=Hold, 1=Buy10%, 2=Buy25%, 3=Buy50%, 4=Sell10%, 5=Sell25%, 6=Sell100%)
             
         Returns:
             Tuple of (observation, reward, terminated, truncated, info)
@@ -157,23 +157,20 @@ class TradingEnv(gym.Env):
         if action == 0:  # Hold
             action_type = 0
             action_value = 0.0
-        elif 1 <= action <= 3:  # Buy
+        elif 1 <= action <= 3:  # Buy (1=10%, 2=25%, 3=50%)
             action_type = 1
-            action_value = {1: 0.25, 2: 0.50, 3: 1.00}[action]
-        else:  # Sell
+            action_value = {1: 0.10, 2: 0.25, 3: 0.50}[action]
+        else:  # Sell (4=10%, 5=25%, 6=100%)
             action_type = 2
-            action_value = {4: 0.25, 5: 0.50, 6: 1.00}[action]
+            action_value = {4: 0.10, 5: 0.25, 6: 1.00}[action]
         
-        # Apply trading action
-        new_portfolio_state = self.trading_logic.apply_trade(
+        # Apply trading action and get validity flag
+        new_portfolio_state, is_valid = self.trading_logic.apply_trade(
             portfolio_state=self.portfolio_state,
             current_price=current_price,
             action=action_type,
             action_value=action_value,
         )
-        
-        # Check if action was valid
-        is_valid = new_portfolio_state != self.portfolio_state
         
         # Update portfolio state
         self.portfolio_state = new_portfolio_state
@@ -181,7 +178,7 @@ class TradingEnv(gym.Env):
         # Calculate current portfolio value (after action, using current price)
         cur_portfolio_value = self.portfolio_state.portfolio_value(current_price)
 
-        # Calculate reward using previous and current portfolio values
+        # Calculate reward using previous and current portfolio values and the validity flag
         reward = float(self.trading_logic.calculate_reward(
             prev_portfolio_value=self.prev_portfolio_value,
             cur_portfolio_value=cur_portfolio_value,
@@ -192,6 +189,7 @@ class TradingEnv(gym.Env):
         observation = self._get_observation()
         info = self._get_info()
         info["action"] = action
+        info["invalid_action"] = not is_valid
         info["step_transaction_cost"] = (
             self.portfolio_state.total_transaction_cost - old_portfolio_state.total_transaction_cost
         )

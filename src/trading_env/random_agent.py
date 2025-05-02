@@ -23,8 +23,8 @@ def main():
             window_size=60,
             initial_balance=10000.0,
             transaction_fee=0.001,
-            reward_scale=500.0,
-            invalid_action_penalty=0.0,
+            reward_scale=10.0,
+            invalid_action_penalty=-1.0,
             render_mode='human'
         )
     )
