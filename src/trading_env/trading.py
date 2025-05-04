@@ -191,33 +191,36 @@ class TradingLogic:
 
         return new_state, is_valid # Return the state and validity
     
+    # Potential modification to calculate_reward
     def calculate_reward(
         self,
         prev_portfolio_value: float,
         cur_portfolio_value: float,
         is_valid: bool,
     ) -> float:
-        """Calculate reward based on portfolio value change.
-
-        Args:
-            prev_portfolio_value: Portfolio value at the end of the previous step.
-            cur_portfolio_value: Portfolio value at the end of the current step.
-            is_valid: Whether the action taken in the current step was valid.
-
-        Returns:
-            Log return scaled reward or penalty for invalid action.
-        """
+        """Calculate reward based on portfolio value percentage change."""
         if not is_valid:
+            # Keep the penalty, but consider if its magnitude (self.invalid_action_penalty)
+            # is too high and discouraging exploration. This value is likely set in __init__.
             return self.invalid_action_penalty
 
-        # Add small epsilon to avoid division by zero or log(0)
-        if prev_portfolio_value <= 1e-12 or cur_portfolio_value <= 1e-12:
-             return 0.0
+        # Avoid division by zero for the return calculation
+        if prev_portfolio_value <= 1e-9: # Use a small threshold
+            return 0.0
 
-        # Calculate log return based on previous vs current value
-        log_return = np.log(cur_portfolio_value / prev_portfolio_value)
+        # Calculate simple percentage return for the step
+        # reward = (cur_portfolio_value / prev_portfolio_value) - 1.0
+        # Alternative: Use absolute PnL change scaled by initial capital?
+        # reward = (cur_portfolio_value - prev_portfolio_value) / self.initial_capital 
+        
+        # Using simple step return:
+        step_return = (cur_portfolio_value - prev_portfolio_value) / prev_portfolio_value
+        
+        # Scale the reward (adjust self.reward_scale if needed)
+        reward = step_return * self.reward_scale
 
-        # Calculate and return the final reward (scaled log return)
-        reward = log_return * self.reward_scale
+        # Optional: Add a small penalty for transaction costs if they aren't
+        # already fully captured in the portfolio value difference.
+        # reward -= step_transaction_cost * cost_penalty_factor
 
-        return reward 
+        return reward
